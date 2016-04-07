@@ -1,3 +1,5 @@
+import numpy as np
+
 def xysolve(x,y):
     """
     Simple function to fit a straight line y=ax+b through a bunch of (x,y)
