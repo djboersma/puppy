@@ -1,3 +1,5 @@
+import numpy as np
+
 class three_point_parabola(object):
     """
     This utility class can be used to quickly get
