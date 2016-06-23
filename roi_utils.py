@@ -1,6 +1,7 @@
 import dicom
 import SimpleITK as sitk
 import numpy as np
+import matplotlib
 
 def list_roinames(ds):
     assert(len(ds.ROIContourSequence)==len(ds.StructureSetROISequence))
@@ -34,7 +35,7 @@ class region_of_interest(object):
         for i,contour in enumerate(roi.ContourSequence):
             npoints = int(contour.NumberOfContourPoints)
             assert(len(contour.ContourData)==3*npoints)
-            points = numpy.array([float(coord) for coord in contour.ContourData]).reshape(npoints,3)
+            points = np.array([float(coord) for coord in contour.ContourData]).reshape(npoints,3)
             zvalues = set(points[:,2])
             assert(len(zvalues)==1)
             self.contours.append(points)
