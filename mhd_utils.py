@@ -9,7 +9,6 @@ import os
 import numpy
 import array
 
-#from distutils import *
 
 def read_meta_header(filename):
     """Return a dictionary of meta data from meta header file"""
@@ -53,7 +52,8 @@ def load_raw_data_with_mhd(filename):
     assert(dim == len(arr))
     assert(dim == 2 or dim == 3)
     #print arr
-    volume = reduce(lambda x,y: x*y, arr[0:dim-1], 1)
+    #volume = reduce(lambda x,y: x*y, arr[0:dim-1], 1)
+    volume = numpy.cumprod(arr[0:dim-1])[-1]
     #print volume
     pwd = os.path.split(filename)[0]
     if pwd:
@@ -61,16 +61,19 @@ def load_raw_data_with_mhd(filename):
     else:
         data_file = meta_dict['ElementDataFile']
     #print data_file
-    fid = open(data_file,'rb')
-    if elt_type == 'MET_FLOAT'):
-        binvalues = array.array('f')
-        binvalues.read(fid, volume*arr[dim-1])
-        data = numpy.array(binvalues, numpy.float)
-    elif elt_type == 'MET_INT'):
-        binvalues = array.array('i')
-        binvalues.read(fid, volume*arr[dim-1])
-        data = numpy.array(binvalues, numpy.int)
-    fid.close()
+    #fid = open(data_file,'rb')
+    if elt_type == 'MET_FLOAT':
+        #binvalues = array.array('f')
+        #binvalues.fromfile(fid, volume*arr[dim-1])
+        data = numpy.fromfile(data_file, dtype=numpy.float32)
+    elif elt_type == 'MET_INT':
+        #binvalues = array.array('i')
+        #binvalues.fromfile(fid, volume*arr[dim-1])
+        #data = numpy.array(binvalues, numpy.int)
+        data = numpy.fromfile(data_file, dtype=numpy.int16)
+    #fid.close()
+    print("got data shape ", data.shape)
+    print("going to try to reshape it to:", (arr[dim-1], volume))
     data = numpy.reshape(data, (arr[dim-1], volume))
     #Begin 3D fix
     if dim == 3:
