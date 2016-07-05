@@ -53,6 +53,12 @@ class contour_layer(object):
         if not ref is None:
              assert(ref==self.ref)
         orientation = sum_of_angles(points)
+        if np.around(orientation) == 360:
+            self.inclusion.append(points)
+        elif np.around(orientation) == -360:
+            self.exclusion.append(points)
+        else np.around(orientation) == -360:
+            logger.error("got a very weird contour a sum of angles equal to {}; z={} ref={}".format(orientation,len(points),self.z))
 
 class region_of_interest(object):
     def __init__(self,ds,roi_id,verbose=False):
@@ -78,26 +84,33 @@ class region_of_interest(object):
                     self.roinr,self.roiname,self.npoints_total,self.ncontours,self.zmin,self.zmax))
         # we are sort the contours by depth-coordinate
         self.contour_layers=[]
+        self.zlist = []
         self.dz = 0.
-        self.contour_refs=[]
+        #self.contour_refs=[]
         for i,contour in enumerate(roi.ContourSequence):
             npoints = int(contour.NumberOfContourPoints)
             assert(len(contour.ContourData)==3*npoints)
             points = np.array([float(coord) for coord in contour.ContourData]).reshape(npoints,3)
             zvalues = set(points[:,2])
             assert(len(zvalues)==1)
-            self.contours.append(points)
-            self.contour_refs.append(contour.ContourImageSequence[0].RefdSOPInstanceUID)
-            if i==1:
-                self.dz = points[0,2] - self.contours[0][0,2]
-                if abs(self.dz)<1e-6:
-                    self.dz = 0.
-            elif self.dz>0. or self.dz<0.:
-                checkdz = points[0,2] - self.contours[i-1][0,2]
-                if abs(checkdz-self.dz)>1e-6:
-                    logger.error("ERROR {} self.dz={} checkdz={} points[0,2]={} previous contourz={}".format(
-                                self.roiname,self.dz,checkdz,points[0,2],self.contours[i-1][0,2]))
-                    self.dz = 0.
+            zvalue = zvalues.pop()
+            ic = self.zlist.index(zvalue)
+            ref = contour.ContourImageSequence[0].RefdSOPInstanceUID
+            if ic==-1:
+                self.contour_layers.append(contour_layer(points,ref))
+                self.zlist.append(zvalue)
+            else:
+                self.contour_layers[ic].add_contour(points,ref)
+        dz = set(np.diff(self.zlist))
+        if len(dz) == 1:
+            self.dz = dz.pop()
+        else:
+            dz = set(np.diff(np.around(self.zlist,decimals=6)))
+            if len(dz) == 1:
+                self.dz = dz.pop()
+            else:
+                logger.warn("not one single z step: {}".format(", ".join([str(d) for d in dz])))
+                self.dz = 0.
     def have_mask(self):
         return self.dz != 0.
     def get_mask(self,img):
