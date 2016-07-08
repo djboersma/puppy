@@ -17,7 +17,7 @@ def sum_of_angles(points,name="unspecified"):
     npoints = len(points)
     assert(npoints>2)
     assert(points.shape[1]==3)
-    assert(len(set(points(:,2)))==1)
+    assert(len(set(points[:,2]))==1)
     pppoints=np.append(points[:,:2],points[:2,:2],axis=0)
     dpppoints=np.diff(pppoints,axis=0)
     dp0=dpppoints[:-1]
@@ -64,35 +64,64 @@ class contour_layer(object):
     -360 degrees) will be used for exclusion. All points of an exclusion
     contour should be included by an inclusion contour.
     """
-    def __init__(self,points,ref):
+    def __init__(self,points=None,ref=None,name="notset"):
+        self.name = name
         self.ref = ref
         self.z = points[0,2]
-        self.add_contour(points)
+        self.inclusion = []
+        self.exclusion = []
+        self.add_contour(points,ref)
     def add_contour(self,points,ref=None):
+        assert(len(points)>2)
         assert(self.z == points[0,2])
-        if not ref is None:
-             assert(ref==self.ref)
+        if self.ref is None:
+            self.ref = ref
+        elif not ref is None:
+            assert(ref==self.ref)
         orientation = sum_of_angles(points)
+        path = matplotlib.path.Path(points[:,:2])
         if np.around(orientation) == 360:
-            self.inclusion.append(points)
+            self.inclusion.append(path)
         elif np.around(orientation) == -360:
-            self.exclusion.append(points)
-        else np.around(orientation) == -360:
-            logger.error("got a very weird contour a sum of angles equal to {}; z={} ref={}".format(orientation,len(points),self.z))
+            self.exclusion.append(path)
+        else:
+            logger.error("({}) got a very weird contour a sum of angles equal to {}; z={} ref={}".format(self.name,orientation,len(points),self.z))
+    def contains_points(self,xycoords):
+        Ncoords = len(xycoords)
+        assert(xycoords.shape == (Ncoords,2))
+        flatmask = np.zeros(len(xycoords),dtype=bool)
+        for q in self.inclusion:
+            flatmask |= q.contains_points(xycoords)
+        for p in self.exclusion:
+            flatmask &= np.logical_not(p.contains_points(xycoords))
+        return flatmask
+    def check(self):
+        assert(len(self.inclusion)>0) # really?
+        for p in self.exclusion:
+            ok = False
+            for q in self.inclusion:
+                if q.contains_path(p):
+                    ok = True
+                    logger.debug("({}) layer {} exclusion contour check OK".format(self.name,self.z))
+                break
+            if not ok:
+                logger.critical("({}) exclusion contour at z={} not contained in any inclusion contour".format(self.name,self.z))
+                raise RuntimeError("contour error")
+        logger.debug("({}) layer {} check OK".format(self.name,self.z))
 
 class region_of_interest(object):
     def __init__(self,ds,roi_id,verbose=False):
-        ok=False
+        roi_found = False
         assert(len(ds.ROIContourSequence)==len(ds.StructureSetROISequence))
         for roi,ssroi in zip(ds.ROIContourSequence,ds.StructureSetROISequence):
             if (str(roi_id)==str(roi.RefdROINumber)) or (str(roi_id)==str(ssroi.ROIName)):
                 self.roinr = int(roi.RefdROINumber)
                 self.roiname = str(ssroi.ROIName)
-                ok = True
+                roi_found = True
                 break
             else: # debug
                 logger.debug("{} != {}".format(roi_id,roi.RefdROINumber))
-        if not ok:
+        if not roi_found:
             raise ValueError("ROI with id {} not found".format(roi_id))
         self.ncontours = len(roi.ContourSequence)
         self.npoints_total = sum([len(c.ContourData) for c in roi.ContourSequence])
@@ -107,20 +136,24 @@ class region_of_interest(object):
         self.zlist = []
         self.dz = 0.
         #self.contour_refs=[]
-        for i,contour in enumerate(roi.ContourSequence):
+        for contour in roi.ContourSequence:
+            ref = contour.ContourImageSequence[0].RefdSOPInstanceUID
             npoints = int(contour.NumberOfContourPoints)
+            # check assumption on number of contour coordinates
             assert(len(contour.ContourData)==3*npoints)
             points = np.array([float(coord) for coord in contour.ContourData]).reshape(npoints,3)
             zvalues = set(points[:,2])
+            # check assumption that all points are in the same xy plane (constant z)
             assert(len(zvalues)==1)
             zvalue = zvalues.pop()
-            ic = self.zlist.index(zvalue)
-            ref = contour.ContourImageSequence[0].RefdSOPInstanceUID
-            if ic==-1:
+            if zvalue in self.zlist:
+                ic = self.zlist.index(zvalue)
+                self.contour_layers[ic].add_contour(points,ref)
+            else:
                 self.contour_layers.append(contour_layer(points,ref))
                 self.zlist.append(zvalue)
-            else:
-                self.contour_layers[ic].add_contour(points,ref)
+        for layer in self.contour_layers:
+            layer.check()
         dz = set(np.diff(self.zlist))
         if len(dz) == 1:
             self.dz = dz.pop()
@@ -129,12 +162,12 @@ class region_of_interest(object):
             if len(dz) == 1:
                 self.dz = dz.pop()
             else:
-                logger.warn("not one single z step: {}".format(", ".join([str(d) for d in dz])))
+                logger.warn("{} not one single z step: {}".format(self.roiname,", ".join([str(d) for d in dz])))
                 self.dz = 0.
     def have_mask(self):
         return self.dz != 0.
     def get_mask(self,img):
-        if self.dz == 0.:
+        if self.have_mask():
             logger.warn("Irregular z-values, masking not yet supported")
             return None
         dims=img.GetSize()
@@ -153,24 +186,25 @@ class region_of_interest(object):
         xpoints=np.linspace(orig[0],orig[0]+space[0]*dims[0],dims[0],False)
         ypoints=np.linspace(orig[1],orig[1]+space[1]*dims[1],dims[1],False)
         xymesh = np.meshgrid(xpoints,ypoints)
+        xyflat = np.array([(x,y) for x,y in zip(xymesh[0].flat,xymesh[1].flat)])
         eps=0.001*np.abs(self.dz)
         #logger.debug("got point mesh")
         if zmin-eps>self.zmax or zmax+eps<self.zmin:
             logger.warn("WARNING: no overlap in z ranges")
             return roimask
-        contour0pts = self.contours[0]
+        clayer0 = self.contour_layers[0]
         #logger.debug contour0pts.shape
-        z0=contour0pts[0,2]
+        z0=clayer0.z
         #logger.debug("z0={}".format(z0))
         #logger.debug("going to loop over z planes in image")
         for iz in range(dims[2]):
             z=orig[2]+space[2]*iz
             icz = int(np.round((z-z0)/self.dz))
-            if icz>=0 and icz<self.ncontours:
+            if icz>=0 and icz<len(self.contour_layers):
                 #logger.debug("masking z={} with contour {}".format(z,icz))
-                path = matplotlib.path.Path(self.contours[icz][:,0:2])
-                flatmask = path.contains_points(np.array([(x,y) for x,y in zip(xymesh[0].flat,xymesh[1].flat)]))
-                #logger.debug("got {} points inside".format(np.sum(flatmask)))
+                #path = matplotlib.path.Path(self.contours[icz][:,0:2])
+                flatmask = self.contour_layers[icz].contains_points(xyflat)
+                logger.debug("got {} points inside".format(np.sum(flatmask)))
                 for iflat,b in enumerate(flatmask):
                     if not b:
                         continue
