@@ -167,7 +167,7 @@ class region_of_interest(object):
     def have_mask(self):
         return self.dz != 0.
     def get_mask(self,img):
-        if self.have_mask():
+        if not self.have_mask():
             logger.warn("Irregular z-values, masking not yet supported")
             return None
         dims=img.GetSize()
