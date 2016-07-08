@@ -16,25 +16,45 @@ def sum_of_angles(points,name="unspecified"):
     phi=0.
     npoints = len(points)
     assert(npoints>2)
-    for i in range(npoints):
-        # we might avoid an explicit for loop if numpy would have a "cyclic array"
-        j=(i+1)%npoints
-        k=(i+2)%npoints
-        ji=points[j,:]-points[i,:]
-        kj=points[k,:]-points[j,:]
-        assert(ji[2]==0)
-        assert(kj[2]==0)
-        krossproduct=ji[0]*kj[1]-ji[1]*kj[0]
-        norms=np.sqrt(np.sum(ji**2)*np.sum(kj**2))
-        sinphi=krossproduct/norms
-        if sinphi<=-1:
-            phi+=180.
-            logger.warn("OOPS full turnaround? sinphi={} krossproduct={} norms={}".format(sinphi,krossproduct,norms))
-        elif sinphi<1:
-            phi+=np.arcsin(sinphi)*180./np.pi
-    if int(np.abs(np.round(phi))) != 360:
-        logger.warn("contour {} has an anomalous sum of segment angles: {}".format(name,phi))
-    return phi
+    assert(points.shape[1]==3)
+    assert(len(set(points(:,2)))==1)
+    pppoints=np.append(points[:,:2],points[:2,:2],axis=0)
+    dpppoints=np.diff(pppoints,axis=0)
+    dp0=dpppoints[:-1]
+    nonzerodp0=(0<np.sum(dp0**2,axis=1))
+    if not nonzerodp0.all():
+        Ngood = np.sum(nonzerodp0) 
+        if Ngood < 2:
+            logger.warn("got a pathological contour: only {} out of {} have nonzero line segments".format(Ngood,npoints))
+            return np.nan
+        else:
+            logger.warn("buggy contour: only {} out of {} have nonzero line segments, going to re-call this function with cleaned point set".format(Ngood,npoints))
+            return sum_of_angles(points[nonzerodp0],name)
+    # if the previous works as intended, then the following assert should always pass
+    assert(nonzerodp0.all())
+    dp1=dpppoints[1:]
+    kross = dp0[:,0]*dp1[:,1] - dp0[:,1]*dp1[:,0]
+    dots  = dp0[:,0]*dp1[:,0] + dp0[:,1]*dp1[:,1]
+    norms = np.sqrt(np.sum(dp0**2,axis=1)*np.sum(dp1**2,axis=1))
+    assert((norms>0).all())
+    sinphi = kross/norms
+    sinphi[sinphi>1]=1
+    sinphi[sinphi<-1]=-1
+    maskQ23=(dots<0)
+    maskQ2=maskQ23*(sinphi>0)
+    maskQ3=maskQ23*(sinphi<0)
+    maskBAD=maskQ23*(sinphi==0)
+    phi=np.arcsin(sinphi)
+    phi[maskQ23]*=-1
+    phi[maskQ2]+=np.pi
+    phi[maskQ3]-=np.pi
+    if maskBAD.any():
+        logger.warn("{} contains {} points where the contour retreats 180 degrees on itself".format(name,np.sum(maskBAD)))
+        return np.nan
+    roundphi = int(np.round(np.sum(phi)*180/np.pi));
+    if abs(roundphi) != 360:
+        logger.warn("({}) weird sum of contour angles: {}, should be + or - 360 degrees".format(name,roundphi))
+    return roundphi
 
 class contour_layer(object):
     """
