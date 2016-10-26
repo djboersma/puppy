@@ -7,12 +7,27 @@ crop the image files to get mean lean input for the simulations...
 """
 
 import os
-from DicomIO.RtStruct import RtStruct
+from RtStruct import RtStruct
 import SimpleITK as sitk
 import numpy as np
 import logging
 import time
+import argparse
 logger = logging.getLogger()
+
+def get_options():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-P','--plan',help='plan name')
+    parser.add_argument('-l','--list',action='store_true',help='list plan names')
+    parser.add_argument('-c','--clamp',action='store_true',help='do also clamp, not only crop')
+    parser.add_argument("-v","--verbose",action='store_true',help="print debugging information?")
+    args = parser.parse_args()
+    if args.verbose:
+        logger.setLevel(level=logging.DEBUG)
+    if not hasattr(args,'plan'):
+        args.plan = 'all'
+    logger.debug("args={}".format(args))
+    return args
 
 def stringpos(pos):
     return "({0:6.1f},{1:6.1f},{2:6.1f})".format(pos[0],pos[1],pos[2])
@@ -46,17 +61,19 @@ def get_dictionary():
                                mhd = os.path.join(patdir,'pat53_lunga00.mhd') )
     logger.debug("checking dict")
     for plan,data in the_dict.items():
+        logger.debug("plan="+plan+"rs="+data['rs'])
+        logger.debug("plan="+plan+"mhd="+data['mhd'])
         assert(os.path.exists(data['rs']))
         assert(os.path.exists(data['mhd']))
     logger.debug("returning dict")
     return the_dict
 
-def get_structure_set(p=None,roiname = '4D External', altroiname='External_4D'):
+def get_structure_set(p=None,clamp=False,verbose=False,roiname = '4D External', altroiname='External_4D'):
     logger.debug("going to get dictionary")
     the_dict = get_dictionary()
     if type(p)==list:
         planlist=p
-    elif p is None:
+    elif p is None or p=="all":
         planlist=the_dict.keys()
     elif type(p)==str:
         planlist=[p]
@@ -125,9 +142,21 @@ def get_structure_set(p=None,roiname = '4D External', altroiname='External_4D'):
                         want=stringpos(wantsize),
                         pct=np.prod(csizes)*100./np.prod(sizes)))
                 # save output
-                sitk.WriteImage(cropmhd,outmhdfile)
+                if clamp:
+                    cropclampmhd = sitk.Clamp(cropmhd,cropmhd.GetPixelIDValue(),-1024,3000)
+                    sitk.WriteImage(cropclampmhd,outmhdfile.replace('.mhd','.clamped.mhd'))
+                else:
+                    sitk.WriteImage(cropmhd,outmhdfile)
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
-    #get_structure_set('44')
-    get_structure_set()
+    args = get_options()
+    if args.list:
+       d = get_dictionary()
+       logger.info("plans in dictionary:\n" + "\n".join(d.keys()))
+    else:
+       get_structure_set(args.plan,args.clamp,args.verbose)
+
+
+
+
