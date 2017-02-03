@@ -19,10 +19,10 @@ if __name__ == '__main__':
         arg1=str(sys.argv[1])
         logging.debug("sys.argv[1]={}".format(arg1))
         logging.info("iso={} mm".format(get_isocenter(arg1)))
-    if len(sys.argv) == 3:
+    elif len(sys.argv) == 3:
         arg1=str(sys.argv[1])
         arg2=int(sys.argv[2])
-        print("sys.argv[1]={} sys.argv[2]={}".format(arg1,arg2))
-        print("iso={} mm".format(get_isocenter(arg1,arg2)))
+        logging.debug("sys.argv[1]={} sys.argv[2]={}".format(arg1,arg2))
+        logging.info("iso={} mm".format(get_isocenter(arg1,arg2)))
     else:
         raise RuntimeError("I need exactly one argument (a DICOM planfile)")
