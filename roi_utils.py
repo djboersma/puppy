@@ -1,3 +1,4 @@
+# coding: utf-8
 import dicom
 import SimpleITK as sitk
 import numpy as np
@@ -125,12 +126,12 @@ class region_of_interest(object):
             raise ValueError("ROI with id {} not found".format(roi_id))
         self.ncontours = len(roi.ContourSequence)
         self.npoints_total = sum([len(c.ContourData) for c in roi.ContourSequence])
-        zvalues = [float(c.ContourData[-1]) for c in roi.ContourSequence]
-        self.zmin=min(zvalues)
-        self.zmax=max(zvalues)
-        if verbose:
-            logger.info("roi {}={} has {} points on {} contours with z range [{},{}]".format(
-                    self.roinr,self.roiname,self.npoints_total,self.ncontours,self.zmin,self.zmax))
+        self.xmin=np.inf
+        self.ymin=np.inf
+        self.zmin=np.inf
+        self.xmax=-np.inf
+        self.ymax=-np.inf
+        self.zmax=-np.inf
         # we are sort the contours by depth-coordinate
         self.contour_layers=[]
         self.zlist = []
@@ -152,6 +153,15 @@ class region_of_interest(object):
             else:
                 self.contour_layers.append(contour_layer(points,ref))
                 self.zlist.append(zvalue)
+            self.xmin = min(self.xmin,np.min(points[:,0]))
+            self.ymin = min(self.ymin,np.min(points[:,1]))
+            self.zmin = min(self.zmin,zvalue)
+            self.xmax = max(self.xmax,np.max(points[:,0]))
+            self.ymax = max(self.ymax,np.max(points[:,1]))
+            self.zmax = max(self.zmax,zvalue)
+        if verbose:
+            logger.info("roi {}={} has {} points on {} contours with z range [{},{}]".format(
+                    self.roinr,self.roiname,self.npoints_total,self.ncontours,self.zmin,self.zmax))
         for layer in self.contour_layers:
             layer.check()
         dz = set(np.diff(self.zlist))
@@ -229,10 +239,14 @@ class region_of_interest(object):
         itkmask=self.get_mask(img)
         logger.debug("got mask with size {}".format(itkmask.GetSize()))
         amask=(sitk.GetArrayFromImage(itkmask)>0)
-        logger.debug("got mask with {} selected voxels, {} of them have zero dose".format(np.sum(amask),np.sum(aimg[amask]==0)))
+        amask0=amask*(aimg==0.0)
+        amaskneg=amask*(aimg<0.0)
+        logger.debug("got mask with {} selected voxels, {} of which have zero dose, {} are negative".format(np.sum(amask),np.sum(amask0),np.sum(amaskneg)))
         dhist,dedges = np.histogram(aimg[amask],bins=nbins,range=(dmin,dmax))
         logger.debug("got histogram with {} edges for {} bins".format(len(dedges),nbins))
         adhist=np.array(dhist,dtype=float)
+        adedges=np.array(dedges,dtype=float)
+        dsum=0.5*np.sum(adhist*adedges[:-1]+adhist*adedges[1:])
         dhistsum=np.sum(adhist)
         amasksum=np.sum(amask)
         adchist=np.cumsum(adhist)
@@ -243,9 +257,9 @@ class region_of_interest(object):
         if dhistsum>0:
             logger.debug("getting dvh")
             dvh=-1.0*adchist/dhistsum+1.0
-            logger.debug("got dvh")
+            logger.debug("got dvh with dsum={} dvh[0]={} adchist[0]={}".format(dsum,dvh[0],adchist[0]))
         else:
             logger.warn("dhistsum is zero or negative")
-        return dvh, dedges, dhistsum
+        return dvh, dedges, dhistsum, dsum
                 
 
