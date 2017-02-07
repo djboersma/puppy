@@ -220,7 +220,7 @@ class region_of_interest(object):
             return None
         logger.debug("got size = {}".format(dims))
         aimg = sitk.GetArrayFromImage(img)
-        logger.debug("got array")
+        logger.debug("got array with shape {}".format(list(aimg.shape)))
         if dmin is None:
             dmin=np.min(aimg)
         if dmax is None:
@@ -229,7 +229,7 @@ class region_of_interest(object):
         itkmask=self.get_mask(img)
         logger.debug("got mask with size {}".format(itkmask.GetSize()))
         amask=(sitk.GetArrayFromImage(itkmask)>0)
-        logger.debug("got mask with {} selected voxels".format(np.sum(amask)))
+        logger.debug("got mask with {} selected voxels, {} of them have zero dose".format(np.sum(amask),np.sum(aimg[amask]==0)))
         dhist,dedges = np.histogram(aimg[amask],bins=nbins,range=(dmin,dmax))
         logger.debug("got histogram with {} edges for {} bins".format(len(dedges),nbins))
         adhist=np.array(dhist,dtype=float)
