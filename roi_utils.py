@@ -4,6 +4,7 @@ import SimpleITK as sitk
 import numpy as np
 import matplotlib
 import logging
+import pylab
 logger = logging.getLogger()
 
 def list_roinames(ds):
@@ -87,6 +88,7 @@ class contour_layer(object):
             self.exclusion.append(path)
         else:
             logger.error("({}) got a very weird contour a sum of angles equal to {}; z={} ref={}".format(self.name,orientation,len(points),self.z))
+        logger.debug("layer {} has {} inclusion path(s) and {} exclusion path(s)".format(self.ref,len(self.inclusion),len(self.exclusion)))
     def contains_points(self,xycoords):
         Ncoords = len(xycoords)
         assert(xycoords.shape == (Ncoords,2))
@@ -189,6 +191,14 @@ class region_of_interest(object):
         roimask.CopyInformation(img)
         orig = roimask.GetOrigin()
         space = roimask.GetSpacing()
+        contained = True
+        for o,s,d,rmin,rmax in zip(orig,space,dims,[self.xmin,self.ymin,self.zmin],[self.xmin,self.ymin,self.zmin]):
+            contained &= (int(np.round(rmin-o)/s) in range(d))
+            contained &= (int(np.round(rmax-o)/s) in range(d))
+        if not contained:
+            logger.warn('DUIZEND BOMMEN EN GRANATEN')
+        else:
+            logger.debug('YAY: roi "{}" is contained in image'.format(self.roiname))
         #logger.debug("copied infor orig={} spacing={}".format(orig,space))
         zmin = orig[2] - 0.5*space[2]
         zmax = orig[2] + (dims[2]-0.5)*space[2]
@@ -240,6 +250,28 @@ class region_of_interest(object):
         logger.debug("got mask with size {}".format(itkmask.GetSize()))
         amask=(sitk.GetArrayFromImage(itkmask)>0)
         amask0=amask*(aimg==0.0)
+        ix0,iy0,iz0 = np.where(amask0)
+        logger.debug('indices for zero dose voxels have {}/{}/{} different values (out of {}/{}/{})'.format(
+            len(set(ix0[:])), len(set(iy0[:])), len(set(iz0[:])),
+            len(ix0), len(iy0), len(iz0)))
+        assert((aimg[ix0,iy0,iz0]==0.0).all())
+        hix0,xedges=np.histogram(ix0,bins=np.arange(-0.5,aimg.shape[0]-0.49,1.0))
+        hiy0,yedges=np.histogram(iy0,bins=np.arange(-0.5,aimg.shape[1]-0.49,1.0))
+        hiz0,zedges=np.histogram(iz0,bins=np.arange(-0.5,aimg.shape[2]-0.49,1.0))
+        oldfig=pylab.gcf()
+        fig=pylab.figure(num="dvhdebug")
+        pylab.suptitle('distribution of indices of voxels in "{}" with dose==0'.format(self.roiname))
+        pylab.subplot(131)
+        pylab.bar(xedges[:-1],hix0)
+        pylab.xlabel('X index')
+        pylab.subplot(132)
+        pylab.bar(yedges[:-1],hiy0)
+        pylab.xlabel('Y index')
+        pylab.subplot(133)
+        pylab.bar(zedges[:-1],hiz0)
+        pylab.xlabel('Z index')
+        pylab.savefig('dvhdebug.pdf')
+        pylab.savefig('dvhdebug.png')
         amaskneg=amask*(aimg<0.0)
         logger.debug("got mask with {} selected voxels, {} of which have zero dose, {} are negative".format(np.sum(amask),np.sum(amask0),np.sum(amaskneg)))
         dhist,dedges = np.histogram(aimg[amask],bins=nbins,range=(dmin,dmax))
