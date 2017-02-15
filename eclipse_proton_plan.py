@@ -106,7 +106,8 @@ class eclipse_proton_field(object):
         return names,np.array(biglist)
 
 class eclipse_proton_plan(object):
-    def __init__(self,filename):
+    def __init__(self,filename,verbose=False):
+        self.verbose = verbose
         self.new_file(filename)
     def new_file(self,filename):
         self.filename = filename
@@ -119,7 +120,7 @@ class eclipse_proton_plan(object):
         self.PatientID = get_if_available(self.plan,'PatientID')
         self.PatientSex = get_if_available(self.plan,'PatientSex')
         self.PatientName = get_if_available(self.plan,'PatientName')
-        self.fields = [ eclipse_proton_field(ion_beam) for ion_beam in self.plan.IonBeamSequence ]
+        self.fields = [ eclipse_proton_field(ion_beam,self.verbose) for ion_beam in self.plan.IonBeamSequence ]
     def basic_checks(self):
         if not self.plan.has_key( dicom.datadict.tag_for_name('IonBeamSequence') ):
             logger.error("This DICOM file '{}' does not seem to be a PLAN file, because it does not contain an Ion Beam Sequence.".format(self.filename))
