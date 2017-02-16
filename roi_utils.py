@@ -58,6 +58,8 @@ def sum_of_angles(points,name="unspecified"):
         logger.warn("({}) weird sum of contour angles: {}, should be + or - 360 degrees".format(name,roundphi))
     return roundphi
 
+# TODO: create a bounding box class and rip out almost all BB-related code from this module
+
 class contour_layer(object):
     """
     List of 2D contours. The ones with positive orientation (sum of angles
@@ -69,10 +71,13 @@ class contour_layer(object):
     def __init__(self,points=None,ref=None,name="notset"):
         self.name = name
         self.ref = ref
-        self.z = points[0,2]
         self.inclusion = []
         self.exclusion = []
-        self.add_contour(points,ref)
+        if points:
+            self.z = points[0,2]
+            self.add_contour(points,ref)
+        else:
+            self.z = points[0,2]
     def add_contour(self,points,ref=None):
         assert(len(points)>2)
         assert(self.z == points[0,2])
@@ -194,6 +199,9 @@ class region_of_interest(object):
         roimask.CopyInformation(img)
         orig = roimask.GetOrigin()
         space = roimask.GetSpacing()
+        #############################################################################################
+        # check that the bounding box of this ROI is contained within the volume of the given image #
+        #############################################################################################
         contained = True
         for o,s,d,rmin,rmax in zip(orig,space,dims,[self.xmin,self.ymin,self.zmin],[self.xmin,self.ymin,self.zmin]):
             contained &= (int(np.round(rmin-o)/s) in range(d))
@@ -203,16 +211,19 @@ class region_of_interest(object):
         else:
             logger.debug('YAY: roi "{}" is contained in image'.format(self.roiname))
         #logger.debug("copied infor orig={} spacing={}".format(orig,space))
+        # ITK: the "origin" has the coordinates of the *center* of the corner voxel
+        # zmin and zmax are the z coordinates of the boundary of the volume
         zmin = orig[2] - 0.5*space[2]
         zmax = orig[2] + (dims[2]-0.5)*space[2]
         #logger.debug("zmin={} zmax={}".format(zmin,zmax))
+        # xpoints and ypoints contain the x/y coordinates of the voxel centers
         xpoints=np.linspace(orig[0],orig[0]+space[0]*dims[0],dims[0],False)
         ypoints=np.linspace(orig[1],orig[1]+space[1]*dims[1],dims[1],False)
         xymesh = np.meshgrid(xpoints,ypoints)
         xyflat = np.array([(x,y) for x,y in zip(xymesh[0].flat,xymesh[1].flat)])
         eps=0.001*np.abs(self.dz)
         #logger.debug("got point mesh")
-        if zmin-eps>self.zmax or zmax+eps<self.zmin:
+        if zmin-eps>self.zmax+self.dz or zmax+eps<self.zmin-self.dz:
             logger.warn("WARNING: no overlap in z ranges")
             return roimask
         clayer0 = self.contour_layers[0]
