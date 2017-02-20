@@ -4,6 +4,7 @@ import SimpleITK as sitk
 import numpy as np
 import matplotlib # for useful Path class, not for plotting...
 from debugging_crap import make_elaborate_debugging_plots
+from bounding_box import bounding_box
 import logging
 logger = logging.getLogger()
 
@@ -111,47 +112,13 @@ def sum_of_angles(points,name="unspecified",rounded=True,scrutinize=False):
     else:
         return sum_phi_deg
 
-class bounding_box(object):
-    """
-    Define ranges in which things are in 3D space.
-    We could probably get rid of the repetitive code
-    by using two 3d arrays or even a 6d one, but keeping
-    xyz lingo is more geometrically intuitive.
-    """
-    def __init__(self):
-        self.xmin=np.inf
-        self.ymin=np.inf
-        self.zmin=np.inf
-        self.xmax=-np.inf
-        self.ymax=-np.inf
-        self.zmax=-np.inf
-    def __repr__(self):
-        return "bounding box [[{},{}],[{},{}],[{},{}]]".format(
-                self.xmin, self.xmax, self.ymin, self.ymax, self.zmin, self.zmax)
-    def should_contain(self,point):
-        self.xmin = min(self.xmin,np.min(point[0]))
-        self.ymin = min(self.ymin,np.min(point[1]))
-        self.zmin = min(self.zmin,np.min(point[2]))
-        self.xmax = max(self.xmax,np.max(point[0]))
-        self.ymax = max(self.ymax,np.max(point[1]))
-        self.zmax = max(self.zmax,np.max(point[2]))
-    def should_contain_all(self,points):
-        self.xmin = min(self.xmin,np.min(points[:,0]))
-        self.ymin = min(self.ymin,np.min(points[:,1]))
-        self.zmin = min(self.zmin,np.min(points[:,2]))
-        self.xmax = max(self.xmax,np.max(points[:,0]))
-        self.ymax = max(self.ymax,np.max(points[:,1]))
-        self.zmax = max(self.zmax,np.max(points[:,2]))
-    def mincorner(self):
-        return np.array([self.xmin,self.ymin,self.zmin])
-    def maxcorner(self):
-        return np.array([self.xmax,self.ymax,self.zmax])
-
 class contour_layer(object):
     """
-    List of 2D contours. The ones with positive orientation (sum of angles
-    between successive contour segments is +360 degrees) will be used to for
-    inclusion, the ones with negative orientation (sum of angles is
+    This is an auxiliary class for the `region_of_interest` class defined below.
+    A `contour_layer` object describes the ROI at one particular z-value.
+    It is basically a list of 2D contours. The ones with positive orientation
+    (sum of angles between successive contour segments is +360 degrees) will be
+    used to for inclusion, the ones with negative orientation (sum of angles is
     -360 degrees) will be used for exclusion. All points of an exclusion
     contour should be included by an inclusion contour.
     """
@@ -274,7 +241,12 @@ class region_of_interest(object):
         return "roi {} defined by contours in {} layers, {}".format(self.roiname,len(self.contour_layers), self.bb)
     def have_mask(self):
         return self.dz != 0.
-    def get_mask(self,img):
+    def get_mask(self,img,zrange=None):
+        """
+        For a given image, compute for every voxel whether it is inside the ROI or not.
+        The `zrange` can be used to limit the z-range of the ROI.
+        If specified, the `zrange` should be contained in the z-range of the given image.
+        """
         if not self.have_mask():
             logger.warn("Irregular z-values, masking not yet supported")
             return None
@@ -308,7 +280,16 @@ class region_of_interest(object):
         if zmin-eps>self.bb.zmax+self.dz or zmax+eps<self.bb.zmin-self.dz:
             logger.warn("WARNING: no overlap in z ranges")
             return roimask
-        #logger.debug("zmin={} zmax={}".format(zmin,zmax))
+        if zrange is None:
+            zrange=(zmin,zmax)
+        else:
+            assert(len(zrange)==2)
+            assert(zrange[0]>=zmin)
+            assert(zrange[1]<=zmax)
+            if zrange[0]-eps>self.bb.zmax+self.dz or zrange[1]+eps<self.bb.zmin-self.dz:
+                logger.warn("WARNING: no overlap in (restricted) z ranges")
+                return roimask
+        # logger.debug("zmin={} zmax={}".format(zmin,zmax))
         # xpoints and ypoints contain the x/y coordinates of the voxel centers
         xpoints=np.linspace(orig[0],orig[0]+space[0]*dims[0],dims[0],False)
         ypoints=np.linspace(orig[1],orig[1]+space[1]*dims[1],dims[1],False)
@@ -321,6 +302,8 @@ class region_of_interest(object):
         #logger.debug("going to loop over z planes in image")
         for iz in range(dims[2]):
             z = orig[2]+space[2]*iz # z coordinate in image/mask
+            if z<zrange[0] or z>zrange[1]:
+                continue
             icz = int(np.round((z-z0)/self.dz)) # layer index
             if icz>=0 and icz<len(self.contour_layers):
                 logger.debug("INSIDE roi: z index mask/image iz={} (z={}) layer index icz={} (z={})".format(iz,z,icz,self.contour_layers[icz].z))
@@ -340,7 +323,7 @@ class region_of_interest(object):
             else:
                 logger.debug("ABOVE roi: z index mask/image iz={} (z={}) layer index icz={} (z0={} dz={} nlayer={})".format(iz,z,icz,z0,self.dz,len(self.contour_layers)))
         return roimask
-    def get_dvh(self,img,nbins=100,dmin=None,dmax=None,debuglabel=None):
+    def get_dvh(self,img,nbins=100,dmin=None,dmax=None,zrange=None,debuglabel=None):
         logger.debug("starting dvh calculation")
         dims=img.GetSize()
         if len(dims)!=3:
@@ -354,7 +337,7 @@ class region_of_interest(object):
         if dmax is None:
             dmax=np.max(aimg)
         logger.debug("dmin={} dmax={}".format(dmin,dmax))
-        itkmask=self.get_mask(img)
+        itkmask=self.get_mask(img,zrange)
         logger.debug("got mask with size {}".format(itkmask.GetSize()))
         amask=(sitk.GetArrayFromImage(itkmask)>0)
         if debuglabel:
