@@ -122,6 +122,7 @@ class region_of_interest(object):
             else: # debug
                 logger.debug("{} != {}".format(roi_id,roi.RefdROINumber))
         if not roi_found:
+            logger.error("ROI with id {} not found; structure set contains: ".format(roi_id) + ", ".join(list_roinames(ds)))
             raise ValueError("ROI with id {} not found".format(roi_id))
         self.ncontours = len(roi.ContourSequence)
         self.npoints_total = sum([len(c.ContourData) for c in roi.ContourSequence])
@@ -191,6 +192,7 @@ class region_of_interest(object):
         #logger.debug("got point mesh")
         if zmin-eps>self.zmax or zmax+eps<self.zmin:
             logger.warn("WARNING: no overlap in z ranges")
+            logger.warn("WARNING: img z range [{}-{}], roi z range [{}-{}]".format(zmin,zmax,self.zmin,self.zmax))
             return roimask
         clayer0 = self.contour_layers[0]
         #logger.debug contour0pts.shape
