@@ -267,7 +267,7 @@ class region_of_interest(object):
             contained &= (int(np.round(rmin-o)/s) in range(d))
             contained &= (int(np.round(rmax-o)/s) in range(d))
         if not contained:
-            logger.warn('DUIZEND BOMMEN EN GRANATEN')
+            logger.warn('DUIZEND BOMMEN EN GRANATEN orig={} space={} dims={} bbroi={}'.format(orig,space,dims,self.bb))
         else:
             logger.debug('YAY: roi "{}" is contained in image'.format(self.roiname))
         #logger.debug("copied infor orig={} spacing={}".format(orig,space))
