@@ -7,13 +7,17 @@ crop the image files to get mean lean input for the simulations...
 """
 
 import os
-from RtStruct import RtStruct
 import SimpleITK as sitk
 import numpy as np
 import logging
 import time
 import argparse
 logger = logging.getLogger()
+try:
+    from RtStruct import RtStruct
+except ImportError:
+    logger.error("in order to use this script you'll need the DicomIO project in your python path")
+    raise ImportError("in order to use this script you'll need the DicomIO project in your python path")
 
 def get_options():
     parser = argparse.ArgumentParser()
