@@ -14,23 +14,23 @@ class bounding_box(object):
         self.xmax=-np.inf
         self.ymax=-np.inf
         self.zmax=-np.inf
-    def __init__(self,bb):
-        self.xmin=bb.xmin
-        self.ymin=bb.ymin
-        self.zmin=bb.zmin
-        self.xmax=bb.xmax
-        self.ymax=bb.ymax
-        self.zmax=bb.zmax
-    def __init__(self,xmin,xmax,ymin,ymax,zmin,zmax):
-        assert(xmin<=xmax)
-        assert(ymin<=ymax)
-        assert(zmin<=zmax)
-        self.xmin=float(xmin)
-        self.ymin=float(ymin)
-        self.zmin=float(zmin)
-        self.xmax=float(xmax)
-        self.ymax=float(ymax)
-        self.zmax=float(zmax)
+    #def __init__(self,bb):
+    #    self.xmin=bb.xmin
+    #    self.ymin=bb.ymin
+    #    self.zmin=bb.zmin
+    #    self.xmax=bb.xmax
+    #    self.ymax=bb.ymax
+    #    self.zmax=bb.zmax
+    #def __init__(self,xmin,xmax,ymin,ymax,zmin,zmax):
+    #    assert(xmin<=xmax)
+    #    assert(ymin<=ymax)
+    #    assert(zmin<=zmax)
+    #    self.xmin=float(xmin)
+    #    self.ymin=float(ymin)
+    #    self.zmin=float(zmin)
+    #    self.xmax=float(xmax)
+    #    self.ymax=float(ymax)
+    #    self.zmax=float(zmax)
     def __repr__(self):
         return "bounding box [[{},{}],[{},{}],[{},{}]]".format(
                 self.xmin, self.xmax, self.ymin, self.ymax, self.zmin, self.zmax)
