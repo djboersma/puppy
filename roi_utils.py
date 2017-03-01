@@ -365,15 +365,19 @@ class region_of_interest(object):
             i50 = adchist.searchsorted(dsum50)
             i02 = adchist.searchsorted(dsum02)
             assert(i50>0)
-            dd50 = dedges[i50]-dedges[i50-1]
-            dd02 = dedges[i02]-dedges[i02-1]
+            dd50 = adchist[i50]-adchist[i50-1]
+            dd02 = adchist[i02]-adchist[i02-1]
+            #dd50 = adhist[i50]
+            #dd02 = adhist[i02]
             assert(dd50>0)
             assert(dd02>0)
-            d50 = ( (adchist[i50]-dsum50)*dedges[i50-1] + (dsum50-adchist[i50]-dsum50)*dedges[i50] ) / dd50
-            d02 = ( (adchist[i02]-dsum02)*dedges[i02-1] + (dsum02-adchist[i02]-dsum02)*dedges[i02] ) / dd02
-            d98 = d02
+            # interpolate
+            d50 = ( (adchist[i50]-dsum50)*dedges[i50-1] + (dsum50-adchist[i50-1])*dedges[i50] ) / dd50
+            d02 = ( (adchist[i02]-dsum02)*dedges[i02-1] + (dsum02-adchist[i02-1])*dedges[i02] ) / dd02
+            logger.info("D50={} D98={}".format(d50,d02))
             logger.debug("getting dvh")
             dvh=-1.0*adchist/dhistsum+1.0
+            d98 = d02
             logger.debug("got dvh with dsum={} dvh[0]={} adchist[0]={}".format(dsum,dvh[0],adchist[0]))
         else:
             logger.warn("dhistsum is zero or negative")
