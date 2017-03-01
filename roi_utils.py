@@ -356,10 +356,25 @@ class region_of_interest(object):
         assert(amasksum==dhistsum)
         assert(amasksum==adchist[-1])
         logger.debug("survived assert")
+        d50=None
+        d98=None
         if dhistsum>0:
+            logger.debug("getting d50 and d98")
+            dsum50=0.5*dhistsum
+            dsum02=0.02*dhistsum
+            i50 = adchist.searchsorted(dsum50)
+            i02 = adchist.searchsorted(dsum02)
+            assert(i50>0)
+            dd50 = dedges[i50]-dedges[i50-1]
+            dd02 = dedges[i02]-dedges[i02-1]
+            assert(dd50>0)
+            assert(dd02>0)
+            d50 = ( (adchist[i50]-dsum50)*dedges[i50-1] + (dsum50-adchist[i50]-dsum50)*dedges[i50] ) / dd50
+            d02 = ( (adchist[i02]-dsum02)*dedges[i02-1] + (dsum02-adchist[i02]-dsum02)*dedges[i02] ) / dd02
+            d98 = d02
             logger.debug("getting dvh")
             dvh=-1.0*adchist/dhistsum+1.0
             logger.debug("got dvh with dsum={} dvh[0]={} adchist[0]={}".format(dsum,dvh[0],adchist[0]))
         else:
             logger.warn("dhistsum is zero or negative")
-        return dvh, dedges, dhistsum, dsum
+        return dvh, dedges, dhistsum, dsum, d50, d98
