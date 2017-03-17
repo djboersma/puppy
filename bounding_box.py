@@ -7,21 +7,27 @@ class bounding_box(object):
     by using two 3d arrays or even a 6d one, but keeping
     xyz lingo is more geometrically intuitive.
     """
-    def __init__(self):
-        self.xmin=np.inf
-        self.ymin=np.inf
-        self.zmin=np.inf
-        self.xmax=-np.inf
-        self.ymax=-np.inf
-        self.zmax=-np.inf
-    #def __init__(self,bb):
-    #    self.xmin=bb.xmin
-    #    self.ymin=bb.ymin
-    #    self.zmin=bb.zmin
-    #    self.xmax=bb.xmax
-    #    self.ymax=bb.ymax
-    #    self.zmax=bb.zmax
-    #def __init__(self,xmin,xmax,ymin,ymax,zmin,zmax):
+    def __init__(self,**kwargs):
+        nkeys = len(kwargs.keys())
+        if nkeys == 0:
+            self.xmin=np.inf
+            self.ymin=np.inf
+            self.zmin=np.inf
+            self.xmax=-np.inf
+            self.ymax=-np.inf
+            self.zmax=-np.inf
+        elif nkeys > 1:
+            raise RuntimeError("too many arguments ({}) to bounding box constructor: {}".format(nkeys,kwargs))
+        elif "bb" in kwargs:
+            bb = kwargs["bb"]
+            self.xmin=bb.xmin
+            self.ymin=bb.ymin
+            self.zmin=bb.zmin
+            self.xmax=bb.xmax
+            self.ymax=bb.ymax
+            self.zmax=bb.zmax
+        elif "xyz" in kwargs:
+            xyz = kwargs["xyz"]
     #    assert(xmin<=xmax)
     #    assert(ymin<=ymax)
     #    assert(zmin<=zmax)

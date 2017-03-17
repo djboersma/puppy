@@ -223,21 +223,21 @@ class contour_layer(object):
             a += pa
         return a
 
+def check_roi(ds,roi_id):
+    for roi,ssroi in zip(ds.ROIContourSequence,ds.StructureSetROISequence):
+        if (str(roi_id)==str(roi.RefdROINumber)) or (str(roi_id)==str(ssroi.ROIName)):
+            roinr = int(roi.RefdROINumber)
+            roiname = str(ssroi.ROIName)
+            return (roi,roinr,roiname)
+        else: # debug
+            logger.debug("{} != {}".format(roi_id,roi.RefdROINumber))
+    logger.error("ROI with id {} not found; structure set contains: ".format(roi_id) + ", ".join(list_roinames(ds)))
+    raise ValueError("ROI with id {} not found".format(roi_id))
+
 class region_of_interest(object):
     def __init__(self,ds,roi_id,verbose=False):
-        roi_found = False
         assert(len(ds.ROIContourSequence)==len(ds.StructureSetROISequence))
-        for roi,ssroi in zip(ds.ROIContourSequence,ds.StructureSetROISequence):
-            if (str(roi_id)==str(roi.RefdROINumber)) or (str(roi_id)==str(ssroi.ROIName)):
-                self.roinr = int(roi.RefdROINumber)
-                self.roiname = str(ssroi.ROIName)
-                roi_found = True
-                break
-            else: # debug
-                logger.debug("{} != {}".format(roi_id,roi.RefdROINumber))
-        if not roi_found:
-            logger.error("ROI with id {} not found; structure set contains: ".format(roi_id) + ", ".join(list_roinames(ds)))
-            raise ValueError("ROI with id {} not found".format(roi_id))
+        roi,self.roinr,self.roiname = check_roi(ds,roi_id)
         self.ncontours = len(roi.ContourSequence)
         self.npoints_total = sum([len(c.ContourData) for c in roi.ContourSequence])
         self.bb = bounding_box()
@@ -404,10 +404,90 @@ class region_of_interest(object):
         assert(amasksum==dhistsum)
         assert(amasksum==adchist[-1])
         logger.debug("survived assert")
+        d50=None
+        d98=None
         if dhistsum>0:
+            logger.debug("getting d50 and d98")
+            dsum50=0.5*dhistsum
+            dsum02=0.02*dhistsum
+            i50 = adchist.searchsorted(dsum50)
+            i02 = adchist.searchsorted(dsum02)
+            assert(i50>0)
+            dd50 = adchist[i50]-adchist[i50-1]
+            dd02 = adchist[i02]-adchist[i02-1]
+            #dd50 = adhist[i50]
+            #dd02 = adhist[i02]
+            assert(dd50>0)
+            assert(dd02>0)
+            # interpolate
+            d50 = ( (adchist[i50]-dsum50)*dedges[i50-1] + (dsum50-adchist[i50-1])*dedges[i50] ) / dd50
+            d02 = ( (adchist[i02]-dsum02)*dedges[i02-1] + (dsum02-adchist[i02-1])*dedges[i02] ) / dd02
+            logger.info("D50={} D98={}".format(d50,d02))
             logger.debug("getting dvh")
             dvh=-1.0*adchist/dhistsum+1.0
+            d98 = d02
             logger.debug("got dvh with dsum={} dvh[0]={} adchist[0]={}".format(dsum,dvh[0],adchist[0]))
         else:
             logger.warn("dhistsum is zero or negative")
-        return dvh, dedges, dhistsum, dsum
+        return dvh, dedges, dhistsum, dsum, d50, d98
+
+def get_dvh(roilist,img,nbins=100,dmin=None,dmax=None,zrange=None,debuglabel=None):
+    logger.debug("starting dvh calculation")
+    assert(len(roilist)>0)
+    dims=img.GetSize()
+    if len(dims)!=3:
+        logger.error("ERROR only 3d images supported")
+        return None
+    logger.debug("got size = {}".format(dims))
+    aimg = sitk.GetArrayFromImage(img)
+    logger.debug("got array with shape {}".format(list(aimg.shape)))
+    if dmin is None:
+        dmin=np.min(aimg)
+    if dmax is None:
+        dmax=np.max(aimg)
+    logger.debug("dmin={} dmax={}".format(dmin,dmax))
+    itkmask=roilist[0].get_mask(img,zrange)
+    for roi in roilist[1:]:
+        itkmask*=roi.get_mask(img,zrange)
+    logger.debug("got mask with size {}".format(itkmask.GetSize()))
+    amask=(sitk.GetArrayFromImage(itkmask)>0)
+    if debuglabel:
+        make_elaborate_debugging_plots(aimg,amask,debuglabel,"_".join([roi.name for roi in roilist]))
+    dhist,dedges = np.histogram(aimg[amask],bins=nbins,range=(dmin,dmax))
+    logger.debug("got histogram with {} edges for {} bins".format(len(dedges),nbins))
+    adhist=np.array(dhist,dtype=float)
+    adedges=np.array(dedges,dtype=float)
+    dsum=0.5*np.sum(adhist*adedges[:-1]+adhist*adedges[1:])
+    dhistsum=np.sum(adhist)
+    amasksum=np.sum(amask)
+    adchist=np.cumsum(adhist)
+    logger.debug("dhistsum={} amasksum={} adchist[-1]={}".format(dhistsum,amasksum,adchist[-1]))
+    assert(amasksum==dhistsum)
+    assert(amasksum==adchist[-1])
+    logger.debug("survived assert")
+    d50=None
+    d98=None
+    if dhistsum>0:
+        logger.debug("getting d50 and d98")
+        dsum50=0.5*dhistsum
+        dsum02=0.02*dhistsum
+        i50 = adchist.searchsorted(dsum50)
+        i02 = adchist.searchsorted(dsum02)
+        assert(i50>0)
+        dd50 = adchist[i50]-adchist[i50-1]
+        dd02 = adchist[i02]-adchist[i02-1]
+        #dd50 = adhist[i50]
+        #dd02 = adhist[i02]
+        assert(dd50>0)
+        assert(dd02>0)
+        # interpolate
+        d50 = ( (adchist[i50]-dsum50)*dedges[i50-1] + (dsum50-adchist[i50-1])*dedges[i50] ) / dd50
+        d02 = ( (adchist[i02]-dsum02)*dedges[i02-1] + (dsum02-adchist[i02-1])*dedges[i02] ) / dd02
+        logger.info("D50={} D98={}".format(d50,d02))
+        logger.debug("getting dvh")
+        dvh=-1.0*adchist/dhistsum+1.0
+        d98 = d02
+        logger.debug("got dvh with dsum={} dvh[0]={} adchist[0]={}".format(dsum,dvh[0],adchist[0]))
+    else:
+        logger.warn("dhistsum is zero or negative")
+    return dvh, dedges, dhistsum, dsum, d50, d98
