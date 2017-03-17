@@ -112,6 +112,33 @@ def sum_of_angles(points,name="unspecified",rounded=True,scrutinize=False):
     else:
         return sum_phi_deg
 
+# "Borrowed" from http://stackoverflow.com/questions/22678990/how-can-i-calculate-the-area-within-a-contour-in-python-using-the-matplotlib
+# Use Green's theorem to compute the area
+# enclosed by the given contour.
+def enclosed_area(vs):
+    logger.debug("vs has shape {}".format(vs.shape))
+    a = 0
+    x0,y0 = vs[0]
+    logger.debug("x0={} y0={}".format(x0,y0))
+    for [x1,y1] in vs[1:]:
+        dx = x1-x0
+        dy = y1-y0
+        a += 0.5*(y0*dx - x0*dy)
+        logger.debug("x0={} y0={} x1={} y1={} a={}".format(x0,y0,x1,y1,a))
+        x0 = x1
+        y0 = y1
+    return -a
+
+def test_enclosed_area():
+    vs = np.zeros((4,2),dtype=float)
+    vs[1,0] = 1
+    vs[2,0] = 1
+    vs[2,1] = 1
+    vs[3,1] = 1
+    print("unit square: area={}".format(enclosed_area(vs)))
+    avs=vs[::-1,:]
+    print("reverse unit square: area={}".format(enclosed_area(avs)))
+
 class contour_layer(object):
     """
     This is an auxiliary class for the `region_of_interest` class defined below.
@@ -182,6 +209,19 @@ class contour_layer(object):
                 logger.critical("({}) exclusion contour at z={} not contained in any inclusion contour".format(self.name,self.z))
                 raise RuntimeError("contour error")
         logger.debug("({}) layer {} check OK".format(self.name,self.z))
+    def get_area(self):
+        a = 0.
+        for q in self.inclusion:
+            qa = enclosed_area(q.vertices)
+            assert(qa>=0)
+            logger.debug("{} z={}: adding {} mm2 from inclusion".format(self.name,self.z,qa))
+            a += qa
+        for p in self.exclusion:
+            pa = enclosed_area(p.vertices)
+            logger.debug("{} z={}: subtracting {} mm2 from exclusion".format(self.name,self.z,-pa))
+            assert(pa<=0)
+            a += pa
+        return a
 
 class region_of_interest(object):
     def __init__(self,ds,roi_id,verbose=False):
@@ -242,6 +282,14 @@ class region_of_interest(object):
         return "roi {} defined by contours in {} layers, {}".format(self.roiname,len(self.contour_layers), self.bb)
     def have_mask(self):
         return self.dz != 0.
+    def get_volume(self):
+        vol = 0.
+        for i,layer in enumerate(self.contour_layers,1):
+            area = layer.get_area()
+            cvol = self.dz * area
+            vol += cvol
+            logger.debug("{}. got volume = dz * area = {} * {} = {}, sum={}".format(i,self.dz,area,cvol,vol))
+        return vol
     def get_mask(self,img,zrange=None):
         """
         For a given image, compute for every voxel whether it is inside the ROI or not.
