@@ -491,3 +491,12 @@ def get_dvh(roilist,img,nbins=100,dmin=None,dmax=None,zrange=None,debuglabel=Non
     else:
         logger.warn("dhistsum is zero or negative")
     return dvh, dedges, dhistsum, dsum, d50, d98
+
+def get_intersection_volume(roilist,xvoxel=1.,yvoxel=1.):
+    # There is probably a clever way to compute this by constructing
+    # an "intersection contour" for each layer: for each contour, keep only
+    # points that are inside all other contours in the list. But is tough to then
+    # put those points in the right order.
+    # Instead we'll just make a grid of points and get the volume of the combined mask.
+    # With xvoxel and yvoxel the caller can tweak the voxel size of the mask in x and y.
+    # In z the voxel size is given by the incoming ROIs.
