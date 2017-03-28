@@ -500,3 +500,6 @@ def get_intersection_volume(roilist,xvoxel=1.,yvoxel=1.):
     # Instead we'll just make a grid of points and get the volume of the combined mask.
     # With xvoxel and yvoxel the caller can tweak the voxel size of the mask in x and y.
     # In z the voxel size is given by the incoming ROIs.
+    itkmask=roilist[0].get_mask(img,zrange)
+    for roi in roilist[1:]:
+        itkmask*=roi.get_mask(img,zrange)
