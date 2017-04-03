@@ -9,85 +9,56 @@ class bounding_box(object):
     """
     def __init__(self,**kwargs):
         nkeys = len(kwargs.keys())
+        self.limits=np.empty((3,2))
         if nkeys == 0:
-            self.xmin=np.inf
-            self.ymin=np.inf
-            self.zmin=np.inf
-            self.xmax=-np.inf
-            self.ymax=-np.inf
-            self.zmax=-np.inf
+            self.limits[:,0]=np.inf
+            self.limits[:,1]=-np.inf
         elif nkeys > 1:
             raise RuntimeError("too many arguments ({}) to bounding box constructor: {}".format(nkeys,kwargs))
         elif "bb" in kwargs:
             bb = kwargs["bb"]
-            self.xmin=bb.xmin
-            self.ymin=bb.ymin
-            self.zmin=bb.zmin
-            self.xmax=bb.xmax
-            self.ymax=bb.ymax
-            self.zmax=bb.zmax
+            self.limits = np.copy(bb.limits)
         elif "xyz" in kwargs:
             xyz = kwargs["xyz"]
-            axyz = np.array(xyz,dtype=float)
-            if not (axyz.shape == (3,2) or axyz.shape==(6,)):
-                raise ValueError("wrong shape for xyz limits: {}".format(axyz.shape))
-            xmin,xmax,ymin,ymax,zmin,zmax = axyz.flat[:]
-            if not (xmin<=xmax):
-                raise ValueError("xmin should be less than xmax, got xmin={} xmax={}".format(xmin,xmax)))
-            if not (ymin<=ymax):
-                raise ValueError("ymin should be less than ymax, got ymin={} ymax={}".format(ymin,ymax)))
-            if not (zmin<=zmax):
-                raise ValueError("zmin should be less than zmax, got zmin={} zmax={}".format(zmin,zmax)))
-            self.xmin=float(xmin)
-            self.ymin=float(ymin)
-            self.zmin=float(zmin)
-            self.xmax=float(xmax)
-            self.ymax=float(ymax)
-            self.zmax=float(zmax)
+            self.limits = np.array(xyz,dtype=float)
+            if self.limits.shape==(6,):
+                self.limits = self.limits.reshape(3,2)
+            elif not self.limits.shape == (3,2):
+                raise ValueError("wrong shape for xyz limits: {}".format(self.limits.shape))
+            if np.logical_not(self.limits[:,0]<=self.limits[:,1]).any():
+                raise ValueError("min should be less or equal max but I got min={} max={}".format(self.limits[:,0],self.limits[:,1]))
     def __repr__(self):
-        return "bounding box [[{},{}],[{},{}],[{},{}]]".format(
-                self.xmin, self.xmax, self.ymin, self.ymax, self.zmin, self.zmax)
+        return "bounding box [[{},{}],[{},{}],[{},{}]]".format(*(self.limits.flat[:].tolist()))
     def volume(self):
-        return (self.xmax-self.xmin)*(self.ymax-self.ymin)*(self.zmax-self.zmin)
+        return np.prod(np.diff(self.limits,axis=1))
     def empty(self):
-        vol = self.volume()
-        return ((vol==0) or np.isinf(vol))
-    def __eq__(self,rhs):
-        lhsvol = self.volume()
-        rhsvol = rhs.volume()
-        if lhsvol != rhsvol:
-            return False
-        if lhsvol==0 and rhsvol==0:
+        if np.isinf(self.limits).any():
             return True
-        return ((self.mincorner()==rhs.mincorner()).all() and (self.maxcorner()==rhs.maxcorner()).all())
+        return (self.volume() == 0.)
+    def __eq__(self,rhs):
+        if self.empty() and rhs.empty():
+            return True
+        return (self.limits==rhs.limits).all()
     def should_contain(self,point):
-        self.xmin = min(self.xmin,np.min(point[0]))
-        self.ymin = min(self.ymin,np.min(point[1]))
-        self.zmin = min(self.zmin,np.min(point[2]))
-        self.xmax = max(self.xmax,np.max(point[0]))
-        self.ymax = max(self.ymax,np.max(point[1]))
-        self.zmax = max(self.zmax,np.max(point[2]))
+        apoint = np.array(point,dtype=float)
+        assert(len(apoint.shape)==1)
+        assert(apoint.shape[0]==3)
+        self.limits[:,0] = np.min([self.limits[:,0],point],axis=0)
+        self.limits[:,1] = np.max([self.limits[:,1],point],axis=0)
     def should_contain_all(self,points):
-        self.xmin = min(self.xmin,np.min(points[:,0]))
-        self.ymin = min(self.ymin,np.min(points[:,1]))
-        self.zmin = min(self.zmin,np.min(points[:,2]))
-        self.xmax = max(self.xmax,np.max(points[:,0]))
-        self.ymax = max(self.ymax,np.max(points[:,1]))
-        self.zmax = max(self.zmax,np.max(points[:,2]))
+        assert(np.array(points).shape[1]==3)
+        self.should_contain(np.min(points,axis=0))
+        self.should_contain(np.max(points,axis=0))
     def mincorner(self):
-        return np.array([self.xmin,self.ymin,self.zmin])
+        return self.limits[:,0]
     def maxcorner(self):
-        return np.array([self.xmax,self.ymax,self.zmax])
+        return self.limits[:,1]
     def contains(self,point,inner=False):
-        assert(len(point>2))
+        assert(len(point)==3)
         if inner:
-            return ( point[0]>self.xmin and point[0]<self.xmax and
-                     point[1]>self.ymin and point[1]<self.ymax and
-                     point[2]>self.zmin and point[2]<self.zmax )
+            return ((point>self.limits[:,0])*(point<self.limits[:,1])).all()
         else:
-            return ( point[0]>=self.xmin and point[0]<=self.xmax and
-                     point[1]>=self.ymin and point[1]<=self.ymax and
-                     point[2]>=self.zmin and point[2]<=self.zmax )
+            return ((point>=self.limits[:,0])*(point<=self.limits[:,1])).all()
     def encloses(self,bb,inner=False):
         return (self.contains(bb.mincorner(),inner) and self.contains(bb.maxcorner(),inner))
 
@@ -99,19 +70,11 @@ import unittest
 class test_bounding_box(unittest.TestCase):
     def test_xyz_constructor(self):
         bb0 = bounding_box(xyz=[[1,2],[3,4],[5,6]])
-        self.assertEqual( bb0.xmin, 1 )
-        self.assertEqual( bb0.xmax, 2 )
-        self.assertEqual( bb0.ymin, 3 )
-        self.assertEqual( bb0.ymax, 4 )
-        self.assertEqual( bb0.zmin, 5 )
-        self.assertEqual( bb0.zmax, 6 )
+        self.assertTrue( ( bb0.limits.flat == np.arange(1,7) ).all() )
         bb1 = bounding_box(xyz=[1,2,3,4,5,6])
-        self.assertEqual( bb1.xmin, 1 )
-        self.assertEqual( bb1.xmax, 2 )
-        self.assertEqual( bb1.ymin, 3 )
-        self.assertEqual( bb1.ymax, 4 )
-        self.assertEqual( bb1.zmin, 5 )
-        self.assertEqual( bb1.zmax, 6 )
+        self.assertTrue( ( bb1.limits.flat == np.arange(1,7) ).all() )
+        bb1 = bounding_box(xyz=range(1,7))
+        self.assertTrue( ( bb1.limits.flat == np.arange(1,7) ).all() )
         with self.assertRaises(ValueError):
             bbxyz_wrong = bounding_box(xyz=[[1,2],[4,3],[5,6]])
         with self.assertRaises(ValueError):
@@ -131,49 +94,54 @@ class test_bounding_box(unittest.TestCase):
     def test_bb_constructor(self):
         bbxyz = bounding_box(xyz=[[1,2],[3,4],[5,6]])
         bbxyz2 = bounding_box(bb=bbxyz)
+        self.assertTrue( (bbxyz.limits == bbxyz2.limits).all() )
+        self.assertFalse( bbxyz.limits is bbxyz2.limits ) # it should be a *copy*, not a reference to the same object
     def test_default_constructor(self):
         bb0 = bounding_box()
-        for b in [bb.xmin,bb.ymin,bb.zmin]:
-            self.assertTrue( np.isinf(b) and b>0)
-        for b in [bb.xmax,bb.ymax,bb.zmax]:
-            self.assertTrue( np.isinf(b) and b<0)
+        self.assertTrue( np.isinf(bb0.limits).all() )
+        self.assertTrue( (bb0.limits[:,0]>0).all() )
+        self.assertTrue( (bb0.limits[:,1]<0).all() )
     def test_equal(self):
         bb0 = bounding_box(xyz=[[1,2],[3,4],[5,6]])
-        bb1 = bounding_box(xyz=[[1,2],[3,4],[5,6]])
-        bb2 = bounding_box(xyz=[[1,2],[3,5],[5,6]])
-        assertEqual(bb0,bb1)
-        assertFalse(bb0,bb2)
+        bb1 = bounding_box(xyz=[[1,2],[3,4],[5,6]]) # same
+        bb2 = bounding_box(xyz=[[1,2],[3,5],[5,6]]) # different
+        self.assertTrue(bb0==bb1)
+        self.assertFalse(bb0==bb2)
         bb0 = bounding_box()
         bb1 = bounding_box()
-        assertEqual(bb0,bb1)
-        assertFalse(bb0,bb2)
+        self.assertTrue(bb0==bb1) # empty is empty
+        self.assertFalse(bb0==bb2) # empty is not full
         bb0 = bounding_box()
-        bb1 = bounding_box(bb0)
-        assertEqual(bb0,bb1)
-        assertFalse(bb1,bb2)
+        bb1 = bounding_box(bb=bb0)
+        self.assertTrue(bb0==bb1)
+        self.assertFalse(bb1==bb2)
         bb1 = bounding_box(xyz=[[1,2],[3,4],[5,5]])
-        assertEqual(bb0,bb1) # both bounding boxes are empty
-        assertFalse(bb1,bb2)
+        self.assertTrue(bb0==bb1) # both bounding boxes are empty
+        self.assertFalse(bb1==bb2)
     def test_corners(self):
         bbxyz = bounding_box(xyz=[[1,2],[3,4],[5,6]])
-        assertEqual(bbxyz.mincorner(), np.array([1.,3.,5.]))
-        assertEqual(bbxyz.maxcorner(), np.array([2.,4.,6.]))
+        self.assertTrue((bbxyz.mincorner() == np.array([1.,3.,5.])).all())
+        self.assertTrue((bbxyz.maxcorner() == np.array([2.,4.,6.])).all())
     def test_contains(self):
         bbxyz = bounding_box(xyz=[[1,2],[3,4],[5,6]])
         xx,yy,zz = np.meshgrid(np.arange(0.5,2.6,1.0), np.arange(2.5,4.6,1.0), np.arange(4.5,6.6,1.0) )
         for i,point in enumerate(zip(xx.flat,yy.flat,zz.flat)):
             if i==13:
-                assertTrue(bbxyz.contains(point))
+                self.assertTrue(bbxyz.contains(point))
             else:
-                assertFalse(bbxyz.contains(point))
+                self.assertFalse(bbxyz.contains(point))
+        self.assertTrue(bbxyz.contains(bbxyz.mincorner(),inner=False))
+        self.assertFalse(bbxyz.contains(bbxyz.mincorner(),inner=True))
+        self.assertTrue(bbxyz.contains(bbxyz.maxcorner(),inner=False))
+        self.assertFalse(bbxyz.contains(bbxyz.maxcorner(),inner=True))
     def test_grow(self):
         bbxyz = bounding_box(xyz=[[1,2],[3,4],[5,6]])
         for point in np.array(range(30)).reshape(10,3):
             bbxyz.should_contain(point)
-            assertTrue(bbxyz.contains(point))
-        assertFalse(bbxyz.contains((0,0,0))
-        assertFalse(bbxyz.contains((0,0,30))
-        assertFalse(bbxyz.contains((-1,10,10))
+            self.assertTrue(bbxyz.contains(point,inner=False))
+        self.assertFalse(bbxyz.contains((0,0,0)))
+        self.assertFalse(bbxyz.contains((0,0,30)))
+        self.assertFalse(bbxyz.contains((-1,10,10)))
         bbxyz2 = bounding_box(xyz=[[1,2],[3,4],[5,6]])
         bbxyz2.should_contain_all( np.array(range(30)).reshape(10,3) )
-        assertEqual(bbxyz,bbxyz2)
+        self.assertEqual(bbxyz,bbxyz2)
