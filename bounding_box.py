@@ -31,14 +31,16 @@ class bounding_box(object):
         self.limits[:,1]=-np.inf
     def __repr__(self):
         return "bounding box [[{},{}],[{},{}],[{},{}]]".format(*(self.limits.flat[:].tolist()))
+    @property
     def volume(self):
         return np.prod(np.diff(self.limits,axis=1))
+    @property
     def empty(self):
         if np.isinf(self.limits).any():
             return True
-        return (self.volume() == 0.)
+        return (self.volume == 0.)
     def __eq__(self,rhs):
-        if self.empty() and rhs.empty():
+        if self.empty and rhs.empty:
             return True
         return (self.limits==rhs.limits).all()
     def should_contain(self,point):
@@ -51,8 +53,10 @@ class bounding_box(object):
         assert(np.array(points).shape[1]==3)
         self.should_contain(np.min(points,axis=0))
         self.should_contain(np.max(points,axis=0))
+    @property
     def mincorner(self):
         return self.limits[:,0]
+    @property
     def maxcorner(self):
         return self.limits[:,1]
     def contains(self,point,inner=False):
@@ -62,25 +66,43 @@ class bounding_box(object):
         else:
             return ((point>=self.limits[:,0])*(point<=self.limits[:,1])).all()
     def encloses(self,bb,inner=False):
-        return (self.contains(bb.mincorner(),inner) and self.contains(bb.maxcorner(),inner))
+        return (self.contains(bb.mincorner,inner) and self.contains(bb.maxcorner,inner))
     def add_margins(self,margins):
         # works both with scalar and vector
         self.limits[:,0]-=margins
         self.limits[:,1]+=margins
     def merge(self,bb):
-        if self.empty():
+        if self.empty:
             self.limits = np.copy(bb.limits)
-        elif not bb.empty():
-            self.should_contain(bb.mincorner())
-            self.should_contain(bb.maxcorner())
+        elif not bb.empty:
+            self.should_contain(bb.mincorner)
+            self.should_contain(bb.maxcorner)
     def have_overlap(self,bb):
-        return ((not self.empty()) and (not bb.empty()) and (self.limits[:,0]<=bb.limits[:,1]).all() and (bb.limits[:,0]<=self.limits[:,1]).all())
+        return ((not self.empty) and (not bb.empty) and (self.limits[:,0]<=bb.limits[:,1]).all() and (bb.limits[:,0]<=self.limits[:,1]).all())
     def intersect(self,bb):
         if not self.have_overlap(bb):
             self.reset()
         else:
-            self.limits[:,0] = np.max([self.mincorner(),bb.mincorner()],axis=0)
-            self.limits[:,1] = np.min([self.maxcorner(),bb.maxcorner()],axis=0)
+            self.limits[:,0] = np.max([self.mincorner,bb.mincorner],axis=0)
+            self.limits[:,1] = np.min([self.maxcorner,bb.maxcorner],axis=0)
+    @property
+    def xmin(self):
+        return self.limits[0,0]
+    @property
+    def xmax(self):
+        return self.limits[0,1]
+    @property
+    def ymin(self):
+        return self.limits[1,0]
+    @property
+    def ymax(self):
+        return self.limits[1,1]
+    @property
+    def zmin(self):
+        return self.limits[2,0]
+    @property
+    def zmax(self):
+        return self.limits[2,1]
 
 #######################################################################
 # TESTING
@@ -140,8 +162,8 @@ class test_bounding_box(unittest.TestCase):
         self.assertFalse(bb1==bb2)
     def test_corners(self):
         bbxyz = bounding_box(xyz=[[1,2],[3,4],[5,6]])
-        self.assertTrue((bbxyz.mincorner() == np.array([1.,3.,5.])).all())
-        self.assertTrue((bbxyz.maxcorner() == np.array([2.,4.,6.])).all())
+        self.assertTrue((bbxyz.mincorner == np.array([1.,3.,5.])).all())
+        self.assertTrue((bbxyz.maxcorner == np.array([2.,4.,6.])).all())
     def test_contains(self):
         bbxyz = bounding_box(xyz=[[1,2],[3,4],[5,6]])
         xx,yy,zz = np.meshgrid(np.arange(0.5,2.6,1.0), np.arange(2.5,4.6,1.0), np.arange(4.5,6.6,1.0) )
@@ -150,10 +172,10 @@ class test_bounding_box(unittest.TestCase):
                 self.assertTrue(bbxyz.contains(point))
             else:
                 self.assertFalse(bbxyz.contains(point))
-        self.assertTrue(bbxyz.contains(bbxyz.mincorner(),inner=False))
-        self.assertFalse(bbxyz.contains(bbxyz.mincorner(),inner=True))
-        self.assertTrue(bbxyz.contains(bbxyz.maxcorner(),inner=False))
-        self.assertFalse(bbxyz.contains(bbxyz.maxcorner(),inner=True))
+        self.assertTrue(bbxyz.contains(bbxyz.mincorner,inner=False))
+        self.assertFalse(bbxyz.contains(bbxyz.mincorner,inner=True))
+        self.assertTrue(bbxyz.contains(bbxyz.maxcorner,inner=False))
+        self.assertFalse(bbxyz.contains(bbxyz.maxcorner,inner=True))
     def test_grow(self):
         bbxyz = bounding_box(xyz=[[1,2],[3,4],[5,6]])
         for point in np.array(range(30)).reshape(10,3):
