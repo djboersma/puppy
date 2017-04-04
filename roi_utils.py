@@ -312,7 +312,7 @@ class region_of_interest(object):
         # check that the bounding box of this ROI is contained within the volume of the given image #
         #############################################################################################
         contained = True
-        for o,s,d,rmin,rmax in zip(orig,space,dims,self.bb.mincorner(),self.bb.maxcorner()):
+        for o,s,d,rmin,rmax in zip(orig,space,dims,self.bb.mincorner,self.bb.maxcorner):
             contained &= (int(np.round(rmin-o)/s) in range(d))
             contained &= (int(np.round(rmax-o)/s) in range(d))
         if not contained:
@@ -507,16 +507,16 @@ def get_intersection_volume(roilist,xvoxel=1.,yvoxel=1.):
     bb = bounding_box(bb=roilist[0].bb)
     for roi in roilist[1:]:
         bb.intersect(roi.bb)
-    if bb.empty():
+    if bb.empty:
         # too bad
         return 0.
     spacing = np.array([xvoxel,yvoxel,dz],dtype=float)
     bb.add_margins(2*spacing)
-    dimsize = np.array(np.round((bb.maxcorner()-bb.mincorner())/spacing),dtype=int)
+    dimsize = np.array(np.round((bb.maxcorner-bb.mincorner)/spacing),dtype=int)
     img = sitk.Image(dimsize,sitk.sitkUInt8)
-    img.SetOrigin(bb.mincorner())
+    img.SetOrigin(bb.mincorner)
     img.SetSpacing(spacing)
-    itkmask = roilist[0].get_mask(img)
+    itkmask = sitk.GetArrayFromImage(roilist[0].get_mask(img))
     for roi in roilist[1:]:
-        itkmask *= roi.get_mask(img)
+        itkmask *= sitk.GetArrayFromImage(roi.get_mask(img))
     return np.sum(itkmask)*np.prod(spacing)
