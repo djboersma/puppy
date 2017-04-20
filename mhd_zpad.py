@@ -38,6 +38,21 @@ def zpad(img,nzbot=0,nztop=0):
     padded_img.SetOrigin(origin)
     return padded_img
 
+if __name__ == '__main__':
+    import argparse, os
+    parser = argparse.ArgumentParser(description='Python script to copy a 3D MHD image file with extra padding to the top and/or bottom.')
+    parser.add_argument('-I','--inputpath',type=str,dest='INPUTPATH',help='input mhd file name')
+    parser.add_argument('-O','--outputpath',type=str,dest='OUTPUTPATH',help='output mhd file name')
+    parser.add_argument('-t','--toppadding',type=int,default=0,dest='TOPPADDING',help='number of layers to add to the top')
+    parser.add_argument('-b','--bottompadding',type=int,default=0,dest='BOTTOMPADDING',help='number of layers to add to the bottom')
+    myargs = parser.parse_args()
+    #print("myargs = {}".format(myargs))
+    assert(myargs.INPUTPATH != myargs.OUTPUTPATH)
+    oldimg = sitk.ReadImage(myargs.INPUTPATH)
+    newimg = zpad(oldimg,myargs.BOTTOMPADDING,myargs.TOPPADDING)
+    sitk.WriteImage(newimg,myargs.OUTPUTPATH)
+
+
 #######################################################################
 # TESTING
 #######################################################################
