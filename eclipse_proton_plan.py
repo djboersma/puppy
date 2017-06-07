@@ -26,13 +26,14 @@ def is_close(x,y,eps=1e-6):
 class eclipse_proton_layer(object):
     def __init__(self,ctrlpnt,cumsumchk=[],verbose=False):
         if verbose:
-            logger.debug('{}. ion beam sequence element with type {}'.format(i,type(ion_beam)))
-            for k in ion_beam.keys():
-                if dicom.datadict.dictionary_has_tag(k):
-                    kw = dicom.datadict.keyword_for_tag(k)
-                else:
-                    kw = "(UNKNOWN)"
-                logger.debug('k={} keyword={}'.format(k,kw))
+            pass
+            #logger.debug('{}. ion beam sequence element with type {}'.format(i,type(ion_beam)))
+            #for k in ion_beam.keys():
+            #    if dicom.datadict.dictionary_has_tag(k):
+            #        kw = dicom.datadict.keyword_for_tag(k)
+            #    else:
+            #        kw = "(UNKNOWN)"
+            #    logger.debug('k={} keyword={}'.format(k,kw))
         nspot =int(ctrlpnt.NumberOfScanSpotPositions)
         assert(ctrlpnt.NominalBeamEnergyUnit == 'MEV')
         if nspot == 1:
@@ -72,26 +73,26 @@ class eclipse_proton_layer(object):
         return txt
 
 class eclipse_proton_field(object):
-    def __init__(self,ionbeam,verbose=False):
+    def __init__(self,ion_beam,verbose=False):
         if verbose:
-            logger.debug('{}. ion beam sequence element with type {}'.format(i,type(ion_beam)))
+            logger.debug('ion beam sequence element with type {}'.format(type(ion_beam)))
             for k in ion_beam.keys():
                 if dicom.datadict.dictionary_has_tag(k):
                     kw = dicom.datadict.keyword_for_tag(k)
                 else:
                     kw = "(UNKNOWN)"
                 logger.debug('k={} keyword={}'.format(k,kw))
-        if not ionbeam.RadiationType == 'PROTON':
+        if not ion_beam.RadiationType == 'PROTON':
             raise RuntimeError('No protons!?? What the hell?')
-        self.name = ionbeam.BeamName
-        self.number = int(ionbeam.BeamNumber)
-        self.msw = ionbeam.FinalCumulativeMetersetWeight
-        self.dose_unit = ionbeam.PrimaryDosimeterUnit
-        self.gantry_angle = ionbeam.IonControlPointSequence[0].GantryAngle
-        self.nlayers = len(ionbeam.IonControlPointSequence)
+        self.name = ion_beam.BeamName
+        self.number = int(ion_beam.BeamNumber)
+        self.msw = ion_beam.FinalCumulativeMetersetWeight
+        self.dose_unit = ion_beam.PrimaryDosimeterUnit
+        self.gantry_angle = ion_beam.IonControlPointSequence[0].GantryAngle
+        self.nlayers = len(ion_beam.IonControlPointSequence)
         assert(self.nlayers%2 == 0)
         cumsumchk=[0.]
-        self.layers = [ eclipse_proton_layer(ionbeam.IonControlPointSequence[2*i],cumsumchk) for i in range(self.nlayers/2) ]
+        self.layers = [ eclipse_proton_layer(ion_beam.IonControlPointSequence[2*i],cumsumchk) for i in range(self.nlayers/2) ]
         assert(len(self.layers)*2 == self.nlayers)
         assert( is_close(self.msw,cumsumchk[0]) )
     def numpify(self):
