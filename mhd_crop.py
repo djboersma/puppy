@@ -52,7 +52,9 @@ if __name__ == '__main__':
     assert(myargs.INPUTPATH != myargs.OUTPUTPATH)
     oldimg = sitk.ReadImage(myargs.INPUTPATH)
     ib,ie = find_bb_indices(oldimg,threshold=myargs.THRESHOLD)
-    newimg = oldimg[ib[0]:ie[0],ib[1]:ie[1],ib[2]:ie[2]]
+    newimg = sitk.Clamp( oldimg[ib[0]:ie[0],ib[1]:ie[1],ib[2]:ie[2]],
+                         oldimg.GetPixelIDValue(),
+                         -1024,3000)
     print("origin old={} new={}".format(oldimg.GetOrigin(),newimg.GetOrigin()))
     print("size old={} new={}".format(oldimg.GetSize(),newimg.GetSize()))
     print("spacing old={} new={}".format(oldimg.GetSpacing(),newimg.GetSpacing()))
